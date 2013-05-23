@@ -4,7 +4,7 @@ define python::package ( $ensure = 'present' )
 
   case $operatingsystem {
     'debian','ubuntu': {
-        package {"python-${name}": ensure => $ensure }
+      package {"python-${name}": ensure => $ensure }
     }
     default: {
       package {"python-${name}": ensure => $ensure }
