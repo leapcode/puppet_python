@@ -10,8 +10,30 @@
 # [*virtualenv*]
 #  virtualenv to run pip in. Default: system-wide
 #
+# [*owner*]
+#  The owner of the virtualenv being manipulated. Default: root
+#
+# [*group*]
+#  The group relating to the virtualenv being manipulated. Default: root
+#
 # [*proxy*]
 #  Proxy server to use for outbound connections. Default: none
+#
+# [*src*]
+# Pip --src parameter; if the requirements file contains --editable resources,
+# this parameter specifies where they will be installed. See the pip
+# documentation for more. Default: none (i.e. use the pip default).
+#
+# [*environment*]
+#  Additional environment variables required to install the packages. Default: none
+#
+# [*forceupdate*]
+#  Run a pip install requirements even if we don't receive an event from the
+# requirements file - Useful for when the requirements file is written as part of a
+# resource other than file (E.g vcsrepo)
+#
+# [*cwd*]
+#  The directory from which to run the "pip install" command. Default: undef
 #
 # === Examples
 #
@@ -24,22 +46,31 @@
 #
 # Sergey Stankevich
 # Ashley Penney
+# Fotis Gimian
 #
 define python::requirements (
   $requirements = $name,
   $virtualenv   = 'system',
-  $proxy        = false,
   $owner        = 'root',
-  $group        = 'root'
+  $group        = 'root',
+  $proxy        = false,
+  $src          = false,
+  $environment  = [],
+  $forceupdate  = false,
+  $cwd          = undef,
 ) {
 
-  $cwd = $virtualenv ? {
+  if $virtualenv == 'system' and ($owner != 'root' or $group != 'root') {
+    fail('python::pip: root user must be used when virtualenv is system')
+  }
+
+  $rootdir = $virtualenv ? {
     'system' => '/',
-    default  => "${virtualenv}/bin/",
+    default  => $virtualenv,
   }
 
   $pip_env = $virtualenv ? {
-    'system' => '`which pip`',
+    'system' => 'pip',
     default  => "${virtualenv}/bin/pip",
   }
 
@@ -48,7 +79,10 @@ define python::requirements (
     default  => "--proxy=${proxy}",
   }
 
-  $req_crc = "${requirements}.sha1"
+  $src_flag = $src ? {
+    false   => '',
+    default => "--src=${src}",
+  }
 
   # This will ensure multiple python::virtualenv definitions can share the
   # the same requirements file.
@@ -58,28 +92,21 @@ define python::requirements (
       mode    => '0644',
       owner   => $owner,
       group   => $group,
+      audit   => content,
       replace => false,
       content => '# Puppet will install and/or update pip packages listed here',
     }
   }
 
-  # SHA1 checksum to detect changes
-  exec { "python_requirements_check_${name}":
-    provider => shell,
-    command  => "sha1sum ${requirements} > ${req_crc}",
-    unless   => "sha1sum -c ${req_crc}",
-    user     => $owner,
-    require  => File[$requirements],
-  }
-
-  exec { "python_requirements_update_${name}":
+  exec { "python_requirements${name}":
     provider    => shell,
-    command     => "${pip_env} install ${proxy_flag} -Ur ${requirements}",
-    cwd         => $cwd,
-    refreshonly => true,
+    command     => "${pip_env} --log ${rootdir}/pip.log install ${proxy_flag} ${src_flag} -r ${requirements}",
+    refreshonly => !$forceupdate,
     timeout     => 1800,
+    cwd         => $cwd,
     user        => $owner,
-    subscribe   => Exec["python_requirements_check_${name}"],
+    subscribe   => File[$requirements],
+    environment => $environment,
   }
 
 }

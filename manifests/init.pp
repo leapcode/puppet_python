@@ -7,19 +7,27 @@
 # [*version*]
 #  Python version to install. Default: system default
 #
+# [*pip*]
+#  Install python-pip. Default: false
+#
 # [*dev*]
 #  Install python-dev. Default: false
 #
 # [*virtualenv*]
-#  Install python-virtualenv. Default: false
+#  Install python-virtualenv. Default: false, also accepts 'pip' which will
+#  install latest virtualenv from pip rather than package manager
 #
 # [*gunicorn*]
 #  Install Gunicorn. Default: false
+#
+# [*manage_gunicorn*]
+#  Allow Installation / Removal of Gunicorn. Default: true
 #
 # === Examples
 #
 # class { 'python':
 #   version    => 'system',
+#   pip        => true,
 #   dev        => true,
 #   virtualenv => true,
 #   gunicorn   => true,
@@ -30,21 +38,25 @@
 # Sergey Stankevich
 #
 class python (
-  $version    = 'system',
-  $dev        = false,
-  $virtualenv = false,
-  $gunicorn   = false
+  $version         = 'system',
+  $pip             = false,
+  $dev             = false,
+  $virtualenv      = false,
+  $gunicorn        = false,
+  $manage_gunicorn = true,
+  $provider        = undef
 ) {
 
   # Module compatibility check
-  $compatible = [ 'Debian', 'Ubuntu', 'CentOS', 'RedHat' ]
-  if ! ($::operatingsystem in $compatible) {
+  $compatible = [ 'Debian', 'RedHat']
+  if ! ($::osfamily in $compatible) {
     fail("Module is not compatible with ${::operatingsystem}")
   }
 
-  Class['python::install'] -> Class['python::config']
-
-  include python::install
-  include python::config
+  # Anchor pattern to contain dependencies
+  anchor { 'python::begin': } ->
+  class { 'python::install': } ->
+  class { 'python::config': } ->
+  anchor { 'python::end': }
 
 }
